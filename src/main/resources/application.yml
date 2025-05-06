@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: java-elasticsearch
+  elasticsearch:
+    uris: http://192.168.96.143:9200
+  data:
+    elasticsearch:
+      repositories:
+        enabled: true
+
+
+elasticsearch:
+  uris: http://192.168.96.144:9200
+  username:
+  password:

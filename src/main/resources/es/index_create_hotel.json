@@ -1,0 +1,42 @@
+{
+  "mappings": {
+    "properties": {
+      "id": {
+        "type": "keyword"
+      },
+      "name": {
+        "type":"text",
+        "analyzer": "ik_max_word"
+      },
+      "address":{
+        "type":"keyword",
+        "index": false
+      },
+      "price": {
+        "type":"integer"
+      },
+      "score": {
+        "type":"integer"
+      },
+      "branch": {
+        "type":"keyword"
+      },
+      "city": {
+        "type":"keyword"
+      },
+      "starName": {
+        "type":"keyword"
+      },
+      "business": {
+        "type":"keyword"
+      },
+      "location": {
+        "type":"geo_point"
+      },
+      "pic": {
+        "type":"keyword",
+        "index": false
+      }
+    }
+  }
+}
