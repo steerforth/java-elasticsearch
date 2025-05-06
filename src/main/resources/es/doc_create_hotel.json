@@ -1,0 +1,13 @@
+{
+  "id": "1",
+  "name":"杭州皇家度假酒店",
+  "address":"杭州市西湖区文一路34号",
+  "price": 888,
+  "score": 44,
+  "branch": "皇家",
+  "city": "杭州",
+  "starName": "五钻",
+  "business": "西湖地区",
+  "location": "30.451235,120.145236",
+  "pic": "https://www.1.jpg"
+}
