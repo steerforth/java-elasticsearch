@@ -18,7 +18,7 @@
       "score": {
         "type":"integer"
       },
-      "branch": {
+      "brand": {
         "type":"keyword"
       },
       "city": {

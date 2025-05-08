@@ -2,8 +2,6 @@ package com.steer.javaelasticsearch.client;
 
 import com.steer.javaelasticsearch.config.Constants;
 import com.steer.javaelasticsearch.util.ResourceFileUtil;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.TotalHits;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
@@ -26,12 +24,19 @@ import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.common.text.Text;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.query.BoolQueryBuilder;
-import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.index.query.MatchQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.index.query.functionscore.FunctionScoreQueryBuilder;
+import org.elasticsearch.index.query.functionscore.ScoreFunctionBuilders;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchHits;
+import org.elasticsearch.search.aggregations.AggregationBuilders;
+import org.elasticsearch.search.aggregations.Aggregations;
+import org.elasticsearch.search.aggregations.bucket.terms.Terms;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.fetch.subphase.highlight.HighlightBuilder;
 import org.elasticsearch.search.fetch.subphase.highlight.HighlightField;
+import org.elasticsearch.search.sort.FieldSortBuilder;
 import org.elasticsearch.search.sort.SortOrder;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -40,6 +45,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 @SpringBootTest
@@ -92,13 +98,17 @@ public class RestClientTest {
                 "  \"id\": \"2\",\n" +
                 "  \"name\":\"杭州如家连锁酒店\",\n" +
                 "  \"city\":\"杭州\",\n" +
-                "  \"price\":\"200\"\n" +
+                "  \"price\":\"200\",\n" +
+                "  \"brand\":\"如家\",\n" +
+                "  \"score\":\"88\"\n" +
                 "}",XContentType.JSON));
         request.add(new IndexRequest(Constants.HOTEL_INDEX).id("3").source("{\n" +
                 "  \"id\": \"3\",\n" +
                 "  \"name\":\"杭州1号城市酒店\",\n" +
                 "  \"city\":\"杭州\",\n" +
-                "  \"price\":\"1200\"\n" +
+                "  \"price\":\"1200\",\n" +
+                "  \"brand\":\"1号\",\n" +
+                "  \"score\":\"100\"\n" +
                 "}",XContentType.JSON));
 
         BulkResponse response = client.bulk(request, RequestOptions.DEFAULT);
@@ -164,7 +174,7 @@ public class RestClientTest {
     @Test
     public void testMultiMatch() throws IOException {
         SearchRequest request = new SearchRequest(Constants.HOTEL_INDEX);
-        request.source().query(QueryBuilders.multiMatchQuery("如家","name","branch"));
+        request.source().query(QueryBuilders.multiMatchQuery("如家","name","brand"));
         SearchResponse response = client.search(request, RequestOptions.DEFAULT);
         LOGGER.info(">>>"+response.toString());
         SearchHits searchHits = response.getHits();
@@ -176,12 +186,19 @@ public class RestClientTest {
         }
     }
 
+    /**
+     * 多条件过滤
+     * @throws IOException
+     */
     @Test
     public void testTermAndRangeQuery() throws IOException {
         SearchRequest request = new SearchRequest(Constants.HOTEL_INDEX);
         //整理条件
         BoolQueryBuilder builder = QueryBuilders.boolQuery();
+        //这些条件会影响文档的评分
         builder.must(QueryBuilders.termQuery("city","杭州"));
+        //适用于需要快速过滤出满足特定条件的文档，但不关心具体评分的场景
+        //filter方法在处理大量数据时可以提高查询性能
         builder.filter(QueryBuilders.rangeQuery("price").gte(400).lte(1300));
 
 //        request.source().query(QueryBuilders.termQuery("city","杭州"));
@@ -212,6 +229,44 @@ public class RestClientTest {
         SearchHit[] hits = searchHits.getHits();
         for(SearchHit hit : hits){
             LOGGER.info(">>>"+hit.getSourceAsString());
+        }
+    }
+
+    /**
+     * 深度分页
+     * @throws IOException
+     */
+    @Test
+    public void testSearchAfter() throws IOException {
+        SearchRequest request = new SearchRequest(Constants.HOTEL_INDEX);
+        //表示不要文档的信息，如hits的返回信息，只要聚合信息
+        SearchSourceBuilder builder = new SearchSourceBuilder();
+        //构建排序条件  必须包含唯一性字段
+        builder.sort(new FieldSortBuilder("price").order(SortOrder.ASC));
+        //次要排序条件
+        builder.sort(new FieldSortBuilder("_id").order(SortOrder.ASC));
+        builder.size(3);
+        //查询条件
+        //builder.query(QueryBuilders.boolQuery().must(QueryBuilders.termQuery("city","杭州")));
+
+//        Object[] lastSortValues = null;
+        Object[] lastSortValues = new Object[]{888,"1"};
+        if (lastSortValues != null){
+            builder.searchAfter(lastSortValues);
+        }
+
+        request.source(builder);
+        SearchResponse response = client.search(request, RequestOptions.DEFAULT);
+        LOGGER.info(">>>"+response.toString());
+        SearchHit[] hits = response.getHits().getHits();
+        if(hits.length > 0){
+            Object[] sortValues = hits[hits.length - 1].getSortValues();
+            if (sortValues.length > 0){
+                for (Object object : sortValues){
+                    LOGGER.info("新的search after值>>>"+object.toString()+"  "+object.getClass());
+                }
+            }
+
         }
     }
 
@@ -246,4 +301,80 @@ public class RestClientTest {
 
         }
     }
+
+    /**
+     * GET /hotel_index/_search
+     * {
+     *   "query": {
+     *     "function_score": {
+     *       "query": {
+     *         "match": {
+     *           "city":"杭州"
+     *         }
+     *       },
+     *       "functions": [
+     *         {
+     *           "filter": {
+     *             "term": {
+     *               "brand": "1号"
+     *             }
+     *           },
+     *           "weight": 5
+     *         }
+     *       ]
+     *     }
+     *   }
+     * }
+     */
+    //算分
+    @Test
+    public void testScore() throws IOException {
+        SearchRequest request = new SearchRequest(Constants.HOTEL_INDEX);
+
+        MatchQueryBuilder matchQuery = QueryBuilders.matchQuery("city", "杭州");
+        FunctionScoreQueryBuilder functionScoreQuery = QueryBuilders.functionScoreQuery(matchQuery, new FunctionScoreQueryBuilder.FilterFunctionBuilder[]{
+                new FunctionScoreQueryBuilder.FilterFunctionBuilder(
+                        QueryBuilders.termQuery("brand","1号"),//算分
+                        ScoreFunctionBuilders.weightFactorFunction(5)
+                )
+        });
+        request.source().query(functionScoreQuery);
+
+        SearchResponse response = client.search(request, RequestOptions.DEFAULT);
+        LOGGER.info(">>>"+response.toString());
+        SearchHits searchHits = response.getHits();
+        long total = searchHits.getTotalHits().value;
+        LOGGER.info(">>>总计数量："+total);
+        SearchHit[] hits = searchHits.getHits();
+        for(SearchHit hit : hits){
+            LOGGER.info(">>>"+hit.getSourceAsString());
+        }
+    }
+
+    /**
+     * Bucket聚合
+     * @throws IOException
+     */
+    @Test
+    public void testAggregation() throws IOException {
+        SearchRequest request = new SearchRequest(Constants.HOTEL_INDEX);
+        //表示不要文档的信息，如hits的返回信息，只要聚合信息
+        request.source().size(0);
+        request.source().aggregation(AggregationBuilders.terms("brandAgg")//自定义名称
+                .field("brand") //聚合字段
+                .size(10));
+
+        SearchResponse response = client.search(request, RequestOptions.DEFAULT);
+        LOGGER.info(">>>"+response.toString());
+        Aggregations aggregations = response.getAggregations();
+        Terms brandAgg = aggregations.get("brandAgg");
+        List<? extends Terms.Bucket> buckets = brandAgg.getBuckets();
+        for (Terms.Bucket bucket:
+        buckets) {
+            LOGGER.info(">>>"+bucket.getKeyAsString()+"  数量:"+bucket.getDocCount());
+        }
+    }
+
+
+
 }
