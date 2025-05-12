@@ -240,6 +240,7 @@ public class RestClientTest {
     public void testSearchAfter() throws IOException {
         SearchRequest request = new SearchRequest(Constants.HOTEL_INDEX);
         //表示不要文档的信息，如hits的返回信息，只要聚合信息
+
         SearchSourceBuilder builder = new SearchSourceBuilder();
         //构建排序条件  必须包含唯一性字段
         builder.sort(new FieldSortBuilder("price").order(SortOrder.ASC));

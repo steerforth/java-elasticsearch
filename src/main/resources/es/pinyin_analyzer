@@ -1,0 +1,65 @@
+PUT /test/
+{
+  "settings" : {
+    "analysis" : {
+      "analyzer" : {
+        "my_analyzer" : {
+          "tokenizer" : "ik_max_word",
+          "filter" : "py"
+        }
+      },
+      "filter" : {
+        "py" : {
+          "type" : "pinyin",
+          "keep_first_letter" : true,
+          "keep_full_pinyin" : false,
+          "keep_none_chinese" : true,
+          "keep_joined_full_pinyin": true,
+          "keep_original" : true,
+          "limit_first_letter_length" : 16,
+          "lowercase" : true,
+          "trim_whitespace" : true,
+          "remove_duplicated_term":true,
+          "keep_none_chinese_in_first_letter" : true
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "name":{
+        "type": "text",
+        "analyzer": "my_analyzer",
+        "search_analyzer": "ik_smart"
+      }
+    }
+  }
+}
+
+
+POST /test/_analyze
+{
+  "text": ["如家酒店真不错"],
+  "analyzer": "my_analyzer"
+}
+
+PUT /test/_doc/1
+{
+  "id":"1",
+  "name":"狮子"
+}
+
+PUT /test/_doc/2
+{
+  "id":"2",
+  "name":"虱子"
+}
+
+GET /test/_search
+{
+  "query": {
+    "match": {
+      "name": "掉入狮子笼咋办"
+    }
+  }
+}
